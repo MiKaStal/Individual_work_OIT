@@ -4,7 +4,6 @@
 #include <iomanip>
 #include <ctime>
 #include <windows.h>
-
 using namespace std;
 
 const int MAX_SIZE = 1000;              // Максимальный размер массива
@@ -77,14 +76,6 @@ struct Participant {
     }
 };
 
-
-/*
-Индекс содержит:
-- key: значение поля, по которому выполняется сортировка/поиск
-- recNum: номер записи в основном массиве participants[]
-Это позволяет сортировать индексы, не перемещая сами записи
-*/
-
 // Индекс по фамилии (строковый ключ, сортировка по алфавиту)
 struct IndexByString {
     string key;           // Фамилия участника
@@ -114,6 +105,134 @@ IndexByString indexBySurname[MAX_SIZE];        // Индекс по фамили
 IndexByInt indexByAge[MAX_SIZE];               // Индекс по возрасту
 int indexCount = 0;                            // Количество элементов в индексе
 
+/*
+Индекс содержит:
+- key: значение поля, по которому выполняется сортировка/поиск
+- recNum: номер записи в основном массиве participants[]
+Это позволяет сортировать индексы, не перемещая сами записи
+*/
+int binarySearchBySurname(const string& key, int left, int right) {
+    // Базовый случай: диапазон пуст
+    if (left > right) {
+        return -1;
+    }
+
+    // Вычисляем середину диапазона
+    int mid = left + (right - left) / 2;
+    string midValue = indexBySurname[mid].key;
+
+    // Сравниваем ключи
+    if (midValue == key) {
+        return indexBySurname[mid].recNum;  // Возвращаем номер записи
+    }
+
+    // Рекурсивный вызов для соответствующей половины
+    if (key < midValue) {
+        return binarySearchBySurname(key, left, mid - 1);
+    }
+    else {
+        return binarySearchBySurname(key, mid + 1, right);
+    }
+}
+
+// Бинарный поиск по возрасту (итерационный)
+// Возвращает количество найденных записей и заполняет массив results номерами записей
+int binarySearchByAge(int key, int results[]) {
+    int left = 0;
+    int right = indexCount - 1;
+    int foundPos = -1;
+
+    // Стандартный итерационный бинарный поиск
+    while (left <= right) {
+        int mid = left + (right - left) / 2;
+        int midValue = indexByAge[mid].key;
+
+        if (midValue == key) {
+            foundPos = mid;  // Запоминаем позицию найденного элемента
+            break;
+        }
+
+        if (key < midValue) {
+            right = mid - 1;
+        }
+        else {
+            left = mid + 1;
+        }
+    }
+
+    // Если не найдено
+    if (foundPos == -1) {
+        return 0;
+    }
+
+    // Поиск всех записей с таким же возрастом (слева от найденной)
+    int count = 0;
+    int pos = foundPos;
+    while (pos >= 0 && indexByAge[pos].key == key) {
+        results[count++] = indexByAge[pos].recNum;
+        pos--;
+    }
+
+    // Поиск всех записей с таким же возрастом (справа от найденной)
+    pos = foundPos + 1;
+    while (pos < indexCount && indexByAge[pos].key == key) {
+        results[count++] = indexByAge[pos].recNum;
+        pos++;
+    }
+
+    return count;  // Возвращаем количество найденных записей
+}
+
+// Обёртка: поиск по фамилии с вводом от пользователя
+void searchBySurnameIndex() {
+    if (indexCount == 0) {
+        cout << "\n[WARNING] Сначала постройте индекс по фамилии!" << '\n';
+        return;
+    }
+
+    string key;
+    cout << "\nПОИСК ПО ФАМИЛИИ (бинарный поиск по индексу)" << '\n';
+    cout << "Введите фамилию для поиска: ";
+    cin >> key;
+
+    int recNum = binarySearchBySurname(key, 0, indexCount - 1);
+
+    if (recNum != -1) {
+        cout << "\n[FOUND] Найдена запись:" << '\n';
+        participants[recNum].printFormatted();
+    }
+    else {
+        cout << "\n[NOT FOUND] Участник с фамилией '" << key << "' не найден!" << '\n';
+    }
+}
+
+// Обёртка: поиск по возрасту с вводом от пользователя
+void searchByAgeIndex() {
+    if (indexCount == 0) {
+        cout << "\n[WARNING] Сначала постройте индекс по возрасту!" << '\n';
+        return;
+    }
+
+    int key;
+    cout << "\n=== ПОИСК ПО ВОЗРАСТУ (бинарный поиск по индексу) ===" << '\n';
+    cout << "Введите возраст для поиска: ";
+    cin >> key;
+
+    int results[MAX_SIZE];  // Массив для хранения найденных номеров записей
+    int count = binarySearchByAge(key, results);
+
+    if (count > 0) {
+        cout << "\n[FOUND] Найдено записей: " << count << '\n';
+        cout << string(100, '-') << '\n';
+        for (int i = 0; i < count; i++) {
+            participants[results[i]].printFormatted();
+        }
+        cout << string(100, '-') << '\n';
+    }
+    else {
+        cout << "\n[NOT FOUND] Участников с возрастом " << key << " лет не найдено!" << '\n';
+    }
+}
 // Настройка консоли для работы с кириллицей
 void setupConsole() {
     SetConsoleOutputCP(1251);
@@ -387,19 +506,19 @@ void buildIndexByAge() {
 }
 
 // П. 7.1: Вывод по индексу (возрастание)
-void outputByIndexAscending(IndexByString idx[], int size, const string& indexName) {
+void outputByIndexAscending(IndexByInt idx[], int size, const string& indexName) {
     cout << "\n ВЫВОД ПО ИНДЕКСУ '" << indexName << "' (ПО ВОЗРАСТАНИЮ)" << '\n';
     for (int i = 0; i < size; i++) {
         int recNum = idx[i].recNum;
         cout << "№ " << participants[recNum].NumberOfParticipant
-            << "Фамилия " << '\n' << participants[recNum].Surname
-            << "Имя " << '\n' << participants[recNum].Name
-            << "Отчество " << '\n' << participants[recNum].Patronymic
-            << "Год " << '\n' << participants[recNum].BirthYear
-            << "Возраст " << '\n' << participants[recNum].getAge()
-            << "Команда " << '\n' << participants[recNum].TeamName
-            << "Результат " << '\n' << participants[recNum].Result
-            << "Город " << '\n' << participants[recNum].City << '\n';
+            << "\nФамилия " << participants[recNum].Surname
+            << "\nИмя " << participants[recNum].Name
+            << "\nОтчество " << participants[recNum].Patronymic
+            << "\nГод " << participants[recNum].BirthYear
+            << "\nВозраст " << participants[recNum].getAge()
+            << "\nКоманда " << participants[recNum].TeamName
+            << "\nРезультат " << participants[recNum].Result
+            << "\nГород " << participants[recNum].City << '\n';
     }
     cout << "Записей: " << size << '\n';
 }
@@ -407,20 +526,18 @@ void outputByIndexAscending(IndexByString idx[], int size, const string& indexNa
 // П. 7.2: Вывод по индексу (убывание) - через обратный проход
 void outputByIndexDescending(IndexByInt idx[], int size, const string& indexName) {
     cout << "\n ВЫВОД ПО ИНДЕКСУ '" << indexName << "' (ПО УБЫВАНИЮ) " << '\n';
-    
-
     // Обратный проход по отсортированному индексу
     for (int i = size - 1; i >= 0; i--) {
         int recNum = idx[i].recNum;
-        cout << "№" << participants[recNum].NumberOfParticipant
-            << "Фамилия" << participants[recNum].Surname
-            << "Имя" << participants[recNum].Name
-            << "Отчество" << participants[recNum].Patronymic
-            << "Год" << participants[recNum].BirthYear
-            << "Возраст" << participants[recNum].getAge()
-            << "Команда" << participants[recNum].TeamName
-            << "Результат" << participants[recNum].Result
-            << "Город" << participants[recNum].City << '\n';
+        cout << "№ " << participants[recNum].NumberOfParticipant
+            << "\nФамилия " << participants[recNum].Surname
+            << "\nИмя " << participants[recNum].Name
+            << "\nОтчество " << participants[recNum].Patronymic
+            << "\nГод " << participants[recNum].BirthYear
+            << "\nВозраст " << participants[recNum].getAge()
+            << "\nКоманда " << participants[recNum].TeamName
+            << "\nРезультат " << participants[recNum].Result
+            << "\nГород " << participants[recNum].City << '\n';
     }
 
     
@@ -556,7 +673,6 @@ void searchByAge() {
 // П. 9: Редактирование записи с обновлением индексов
 void editRecord() {
     cout << "\n РЕДАКТИРОВАНИЕ ЗАПИСИ " << '\n';
-
     int number;
     cout << "Введите номер участника для редактирования: ";
     cin >> number;
@@ -1896,59 +2012,589 @@ void runAllTests() {
 }
 
 
+
+// СТРУКТУРА УЗЛА ЛИНЕЙНОГО СПИСКА (ЗАДАНИЕ 3)
+
+struct ListNode {
+    Participant* data;      // Указатель на данные
+    ListNode* nextInput;    // Связь для порядка ввода
+    ListNode* nextSurname;  // Связь для сортировки по фамилии
+    ListNode* nextAge;      // Связь для сортировки по возрасту
+
+    ListNode(Participant* p) : data(p), nextInput(nullptr), nextSurname(nullptr), nextAge(nullptr) {}
+};
+
+
+// ГЛОБАЛЬНЫЕ "ГОЛОВЫ" СПИСКОВ
+
+ListNode* headInput = nullptr;    // Голова списка порядка ввода
+ListNode* headSurname = nullptr;  // Голова списка по фамилии
+ListNode* headAge = nullptr;      // Голова списка по возрасту
+
+
+// ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+
+
+// Создание нового участника (ввод с клавиатуры)
+Participant* createNewParticipant() {
+    Participant* p = new Participant();
+
+    cout << "\n--- Ввод данных участника ---" << '\n';
+    cout << "Номер участника: ";
+    cin >> p->NumberOfParticipant;
+    cout << "Фамилия: ";
+    cin >> p->Surname;
+    cout << "Имя: ";
+    cin >> p->Name;
+    cout << "Отчество: ";
+    cin >> p->Patronymic;
+    cout << "Год рождения: ";
+    cin >> p->BirthYear;
+    cout << "Команда: ";
+    cin >> p->TeamName;
+    cout << "Результат: ";
+    cin >> p->Result;
+    cout << "Город: ";
+    cin >> p->City;
+
+    p->isDeleted = false;
+    return p;
+}
+
+
+// НОВЫЙ ФОРМАТ ВЫВОДА ОДНОГО УЧАСТНИКА
+
+void printParticipant(const Participant* p) {
+    if (!p || p->isDeleted) return;
+
+    cout << "№ " << p->NumberOfParticipant << '\n'
+        << "Фамилия " << p->Surname << '\n'
+        << "Имя " << p->Name << '\n'
+        << "Отчество " << p->Patronymic << '\n'
+        << "Год " << p->BirthYear << '\n'
+        << "Возраст " << p->getAge() << '\n'
+        << "Команда " << p->TeamName << '\n'
+        << "Результат " << p->Result << '\n'
+        << "Город " << p->City << '\n';
+}
+
+
+// 1. & 2. ДОБАВЛЕНИЕ В СПИСОК С СОРТИРОВКОЙ
+
+
+// Добавление в конец списка порядка ввода
+void appendToInputList(ListNode* newNode) {
+    if (!headInput) {
+        headInput = newNode;
+    }
+    else {
+        ListNode* curr = headInput;
+        while (curr->nextInput) {
+            curr = curr->nextInput;
+        }
+        curr->nextInput = newNode;
+    }
+}
+
+// Вставка в отсортированный список по фамилии (возрастание)
+void insertSortedSurname(ListNode*& head, ListNode* newNode) {
+    if (!head || newNode->data->Surname < head->data->Surname) {
+        newNode->nextSurname = head;
+        head = newNode;
+        return;
+    }
+
+    ListNode* curr = head;
+    while (curr->nextSurname && curr->nextSurname->data->Surname <= newNode->data->Surname) {
+        curr = curr->nextSurname;
+    }
+    newNode->nextSurname = curr->nextSurname;
+    curr->nextSurname = newNode;
+}
+
+// Вставка в отсортированный список по возрасту (возрастание)
+void insertSortedAge(ListNode*& head, ListNode* newNode) {
+    if (!head || newNode->data->getAge() < head->data->getAge()) {
+        newNode->nextAge = head;
+        head = newNode;
+        return;
+    }
+
+    ListNode* curr = head;
+    while (curr->nextAge && curr->nextAge->data->getAge() <= newNode->data->getAge()) {
+        curr = curr->nextAge;
+    }
+    newNode->nextAge = curr->nextAge;
+    curr->nextAge = newNode;
+}
+
+// Основная функция добавления нового участника
+void addNewParticipant() {
+    Participant* p = createNewParticipant();
+    ListNode* newNode = new ListNode(p);
+
+    // Включаем во все три списка
+    appendToInputList(newNode);
+    insertSortedSurname(headSurname, newNode);
+    insertSortedAge(headAge, newNode);
+
+    cout << "\n[OK] Участник добавлен во все списки." << '\n';
+}
+
+
+// 3. ПРОСМОТР (ВЫВОД) СПИСКОВ
+
+
+// Итерационный вывод списка
+void printListIterative(ListNode* head, const string& type) {
+    cout << "\n========================================" << '\n';
+    cout << "=== СПИСОК (" << type << ") ===" << '\n';
+    cout << "========================================" << '\n';
+
+    ListNode* curr = head;
+    int count = 0;
+    while (curr) {
+        if (!curr->data->isDeleted) {
+            cout << "\n--- Запись #" << (count + 1) << " ---" << '\n';
+            printParticipant(curr->data);
+            count++;
+        }
+        curr = (type == "Ввод") ? curr->nextInput :
+            (type == "Фамилия") ? curr->nextSurname : curr->nextAge;
+    }
+
+    cout << "========================================" << '\n';
+    if (count == 0) {
+        cout << "Список пуст." << '\n';
+    }
+    else {
+        cout << "Всего записей: " << count << '\n';
+    }
+    cout << "========================================" << '\n';
+}
+
+// Рекурсивный вывод (вспомогательная функция)
+void printListRecursiveHelper(ListNode* node, const string& type, int& count) {
+    if (!node) return;
+
+    if (!node->data->isDeleted) {
+        cout << "\n--- Запись #" << (count + 1) << " ---" << '\n';
+        printParticipant(node->data);
+        count++;
+    }
+
+    ListNode* nextNode = (type == "Ввод") ? node->nextInput :
+        (type == "Фамилия") ? node->nextSurname : node->nextAge;
+
+    printListRecursiveHelper(nextNode, type, count);
+}
+
+// Обёртка для рекурсивного вывода
+void printListRecursive(ListNode* head, const string& type) {
+    cout << "\n========================================" << '\n';
+    cout << "=== СПИСОК (" << type << ") - РЕКУРСИВНЫЙ ВЫВОД ===" << '\n';
+    cout << "========================================" << '\n';
+
+    int count = 0;
+    printListRecursiveHelper(head, type, count);
+
+    cout << "========================================" << '\n';
+    if (count == 0) {
+        cout << "Список пуст." << '\n';
+    }
+    else {
+        cout << "Всего записей: " << count << '\n';
+    }
+    cout << "========================================" << '\n';
+}
+
+
+// 4. ПОИСК В СПИСКАХ
+
+
+// Поиск по фамилии (рекурсивный по списку фамилий)
+ListNode* searchBySurnameRecursive(ListNode* node, const string& surname) {
+    if (!node) return nullptr;
+    if (node->data->Surname == surname && !node->data->isDeleted) {
+        return node;
+    }
+    return searchBySurnameRecursive(node->nextSurname, surname);
+}
+
+// Поиск по возрасту (итерационный по списку возрастов)
+ListNode* searchByAgeIterative(ListNode* head, int age) {
+    ListNode* curr = head;
+    while (curr) {
+        if (curr->data->getAge() == age && !curr->data->isDeleted) {
+            return curr;
+        }
+        curr = curr->nextAge;
+    }
+    return nullptr;
+}
+
+void performSearch() {
+    cout << "\n=== ПОИСК ===" << '\n';
+    cout << "1. Поиск по фамилии (рекурсивный)" << '\n';
+    cout << "2. Поиск по возрасту (итерационный)" << '\n';
+    cout << "Выбор: ";
+    int choice;
+    cin >> choice;
+
+    if (choice == 1) {
+        string surname;
+        cout << "Введите фамилию: ";
+        cin >> surname;
+        ListNode* found = searchBySurnameRecursive(headSurname, surname);
+        if (found) {
+            cout << "\n[НАЙДЕНО]" << '\n';
+            printParticipant(found->data);
+        }
+        else {
+            cout << "\n[НЕ НАЙДЕНО] Участник с фамилией " << surname << '\n';
+        }
+    }
+    else if (choice == 2) {
+        int age;
+        cout << "Введите возраст: ";
+        cin >> age;
+        ListNode* found = searchByAgeIterative(headAge, age);
+        if (found) {
+            cout << "\n[НАЙДЕНО]" << '\n';
+            printParticipant(found->data);
+        }
+        else {
+            cout << "\n[НЕ НАЙДЕНО] Участников с возрастом " << age << '\n';
+        }
+    }
+}
+
+
+// 5. УДАЛЕНИЕ ИЗ СПИСКОВ
+
+
+// Удаление узла из всех трёх списков
+void deleteNode(ListNode* nodeToDelete) {
+    if (!nodeToDelete) return;
+
+    // 1. Удаляем из списка ввода
+    if (headInput == nodeToDelete) {
+        headInput = headInput->nextInput;
+    }
+    else {
+        ListNode* curr = headInput;
+        while (curr && curr->nextInput != nodeToDelete) {
+            curr = curr->nextInput;
+        }
+        if (curr) curr->nextInput = nodeToDelete->nextInput;
+    }
+
+    // 2. Удаляем из списка фамилий
+    if (headSurname == nodeToDelete) {
+        headSurname = headSurname->nextSurname;
+    }
+    else {
+        ListNode* curr = headSurname;
+        while (curr && curr->nextSurname != nodeToDelete) {
+            curr = curr->nextSurname;
+        }
+        if (curr) curr->nextSurname = nodeToDelete->nextSurname;
+    }
+
+    // 3. Удаляем из списка возрастов
+    if (headAge == nodeToDelete) {
+        headAge = headAge->nextAge;
+    }
+    else {
+        ListNode* curr = headAge;
+        while (curr && curr->nextAge != nodeToDelete) {
+            curr = curr->nextAge;
+        }
+        if (curr) curr->nextAge = nodeToDelete->nextAge;
+    }
+
+    // Освобождение памяти
+    delete nodeToDelete->data;
+    delete nodeToDelete;
+    cout << "\n[OK] Запись удалена из всех списков." << '\n';
+}
+
+// Удаление по фамилии
+void deleteBySurname() {
+    string surname;
+    cout << "Введите фамилию для удаления: ";
+    cin >> surname;
+
+    ListNode* found = searchBySurnameRecursive(headSurname, surname);
+    if (found) {
+        deleteNode(found);
+    }
+    else {
+        cout << "\n[ERROR] Не найдено для удаления." << '\n';
+    }
+}
+
+// Удаление по возрасту
+void deleteByAge() {
+    int age;
+    cout << "Введите возраст для удаления: ";
+    cin >> age;
+
+    ListNode* found = searchByAgeIterative(headAge, age);
+    if (found) {
+        deleteNode(found);
+    }
+    else {
+        cout << "\n[ERROR] Не найдено для удаления." << '\n';
+    }
+}
+
+
+// ОСВОБОЖДЕНИЕ ПАМЯТИ
+
+void cleanupList() {
+    ListNode* curr = headInput;
+    while (curr) {
+        ListNode* temp = curr;
+        curr = curr->nextInput;
+        delete temp->data;
+        delete temp;
+    }
+    headInput = headSurname = headAge = nullptr;
+}
+void deleteFirstElement() {
+    cout << "\n=== УДАЛЕНИЕ ПЕРВОГО ЭЛЕМЕНТА ===" << endl;
+
+    if (!headInput) {
+        cout << "[ERROR] Список пуст! Нечего удалять." << endl;
+        return;
+    }
+
+    ListNode* toDelete = headInput;
+
+    // Определяем тип удаляемого элемента
+    if (toDelete->nextInput == nullptr) {
+        cout << "[INFO] Удаляется ЕДИНСТВЕННЫЙ элемент списка" << endl;
+    }
+    else {
+        cout << "[INFO] Удаляется ПЕРВЫЙ элемент списка" << endl;
+        cout << "Данные удаляемого элемента:" << endl;
+        printParticipant(toDelete->data);
+    }
+
+    // Удаляем узел из всех списков
+    deleteNode(toDelete);
+
+    cout << "\n[OK] Первый элемент успешно удалён!" << endl;
+}
+
+// Удаление последнего элемента списка
+void deleteLastElement() {
+    cout << "\n=== УДАЛЕНИЕ ПОСЛЕДНЕГО ЭЛЕМЕНТА ===" << endl;
+
+    if (!headInput) {
+        cout << "[ERROR] Список пуст! Нечего удалять." << endl;
+        return;
+    }
+
+    // Поиск последнего элемента в списке порядка ввода
+    ListNode* prev = nullptr;
+    ListNode* curr = headInput;
+
+    while (curr->nextInput) {
+        prev = curr;
+        curr = curr->nextInput;
+    }
+
+    // curr теперь указывает на последний элемент
+    cout << "[INFO] Удаляется ПОСЛЕДНИЙ элемент списка" << endl;
+    cout << "Данные удаляемого элемента:" << endl;
+    printParticipant(curr->data);
+
+    // Удаляем узел из всех списков
+    deleteNode(curr);
+
+    cout << "\n[OK] Последний элемент успешно удалён!" << endl;
+}
+
+
+// ГЛАВНАЯ ФУНКЦИЯ (МЕНЮ)
+
+/*
+1
+1
+ Smith
+ John
+ Johnovich
+ 2004
+ Team
+ 1
+ Town
+ 1
+ 2
+ Bond
+ John
+ Johnovich
+ 2005
+ Team
+ 2
+ Town
+ 1
+ 3
+ Mercury
+ Fred
+ Johnovich
+ 2001
+ Team
+ 3
+ Town
+1
+ 4
+ Senna
+ Ayrton
+ Ayrtovich
+ 2003
+ Team
+ 4
+ Town
+*/
 int main() {
-    setupConsole();
-    //runAllTests(); 
-    // return 0;
-    // ИНТЕРАКТИВНЫЙ РЕЖИМ
+    setlocale(LC_ALL, "Russian");
     int choice=999;
-    while (choice != 0) {
-        showMenuUpdated();
-        cout << "Ваш выбор: ";
+    while (choice) {
+        cout << "ЗАДАНИЕ 3: ЛИНЕЙНЫЕ СПИСКИ" << '\n';
+        cout << "1. Добавить участника (ввод + сортировка)" << '\n';
+        cout << "2. Вывод списка (порядок ввода) - итерационный" << '\n';
+        cout << "3. Вывод списка (по фамилии) - итерационный" << '\n';
+        cout << "4. Вывод списка (по возрасту) - итерационный" << '\n';
+        cout << "5. Вывод списка (рекурсивный)" << '\n';
+        cout << "6. Поиск участника" << '\n';
+        cout << "7. Удалить по фамилии" << '\n';
+        cout << "8. Удалить по возрасту" << '\n';
+        cout << "9. Удалить ПЕРВЫЙ элемент списка" << '\n';
+        cout << "10. Удалить ПОСЛЕДНИЙ элемент списка" << '\n';
+        cout << "0. Выход" << '\n';
+        cout << "Выбор: ";
         cin >> choice;
 
         switch (choice) {
-        case 1: inputFromKeyboard(); break;
-        case 2: outputToScreen(); break;
-        case 3: outputToFile(); break;
-        case 4: inputFromFile(); break;
-        case 5: buildTreeIndexBySurname(); break;
-        case 6: buildTreeIndexByAge(); break;
-        case 7:
-            buildTreeIndexBySurname();
-            outputByTreeAscending("Фамилия", false);
+        case 1: addNewParticipant(); break;
+        case 2: printListIterative(headInput, "Ввод"); break;
+        case 3: printListIterative(headSurname, "Фамилия"); break;
+        case 4: printListIterative(headAge, "Возраст"); break;
+        case 5:
+            cout << "\nРекурсивный вывод:" << '\n';
+            cout << "1. По вводу" << '\n';
+            cout << "2. По фамилии" << '\n';
+            cout << "3. По возрасту" << '\n';
+            cout << "Выбор: ";
+            int recChoice;
+            cin >> recChoice;
+            if (recChoice == 1) printListRecursive(headInput, "Ввод");
+            else if (recChoice == 2) printListRecursive(headSurname, "Фамилия");
+            else if (recChoice == 3) printListRecursive(headAge, "Возраст");
             break;
-        case 8:
-            buildTreeIndexBySurname();
-            outputByTreeDescending("Фамилия", false);
-            break;
-        case 9:
-            buildTreeIndexByAge();
-            outputByTreeAscending("Возраст", true);
-            break;
-        case 10:
-            buildTreeIndexByAge();
-            outputByTreeDescending("Возраст", true);
-            break;
-        case 11: searchBySurnameTree(); break;
-        case 12: searchByAgeTree(); break;
-        case 13: editRecordWithTree(); break;
-        case 14: deleteRecordLogicalWithTree(); break;
-        case 15: restoreRecordWithTree(); break;
-        case 16: deleteRecordsPhysicalWithTree(); break;
-        case 99:
-            runAllTests();
-            break;
-        case 0:
-            cout << "\n[EXIT] Завершение работы..." << '\n';
-            deleteTreeString(rootBySurname);
-            deleteTreeInt(rootByAge);
-            return 0;
-        default:
-            cout << "\n[ERROR] Неверный выбор!" << '\n';
+        case 6: performSearch(); break;
+        case 7: deleteBySurname(); break;
+        case 8: deleteByAge(); break;
+        case 9: deleteFirstElement(); break;      // НОВЫЙ ПУНКТ
+        case 10: deleteLastElement(); break;      // НОВЫЙ ПУНКТ
+        case 0: cout << "\nВыход..." << '\n'; break;
+        default: cout << "\nНеверный выбор!" << '\n';
         }
-
     }
-
+    cleanupList();
     return 0;
+        //setupConsole();
+        //runAllTests(); 
+        // return 0;
+        // ИНТЕРАКТИВНЫЙ РЕЖИМ
+        /*while (choice) {
+            showMenu();
+            cout << "Ваш выбор: ";
+            cin >> choice;
+
+            switch (choice) {
+            case 1: inputFromKeyboard(); break;
+            case 2: outputToScreen(); break;
+            case 3: outputToFile(); break;
+            case 4: inputFromFile(); break;
+            case 5: buildIndexBySurname(); break;
+            case 6: buildIndexByAge(); break;
+            case 7:
+                buildIndexBySurname();
+                for (int i = 0; i < indexCount; i++) {
+                    int recNum = indexBySurname[i].recNum;
+                    participants[recNum].printFormatted();
+                }
+                break;
+            case 8:
+                buildIndexBySurname();
+                // Для убывания по строке - обратный проход
+                for (int i = indexCount - 1; i >= 0; i--) {
+                    int recNum = indexBySurname[i].recNum;
+                    participants[recNum].printFormatted();
+                }
+                break;
+            case 9:
+                buildIndexByAge();
+                outputByIndexAscending(indexByAge, indexCount, "Возраст");
+                break;
+            case 10:
+                buildIndexByAge();
+                outputByIndexDescending(indexByAge, indexCount, "Возраст");
+                break;
+            case 11:searchBySurnameIndex();break;
+            case 12: searchByAge(); break;
+            case 13: editRecord(); break;
+            case 14: deleteRecordLogical(); break;
+            case 15: restoreRecord(); break;
+            case 16: deleteRecordsPhysical(); break;
+            }
+        }*/
+        /*while (choice != 0) {
+            showMenuUpdated();
+            cout << "Ваш выбор: ";
+            cin >> choice;
+            switch (choice) {
+            case 1: inputFromKeyboard(); break;
+            case 2: outputToScreen(); break;
+            case 3: outputToFile(); break;
+            case 4: inputFromFile(); break;
+            case 5: buildTreeIndexBySurname(); break;
+            case 6: buildTreeIndexByAge(); break;
+            case 7:
+                buildTreeIndexBySurname();
+                outputByTreeAscending("Фамилия", false);
+                break;
+            case 8:
+                buildTreeIndexBySurname();
+                outputByTreeDescending("Фамилия", false);
+                break;
+            case 9:
+                buildTreeIndexByAge();
+                outputByTreeAscending("Возраст", true);
+                break;
+            case 10:
+                buildTreeIndexByAge();
+                outputByTreeDescending("Возраст", true);
+                break;
+            case 11: searchBySurnameTree(); break;
+            case 12: searchByAgeTree(); break;
+            case 13: editRecordWithTree(); break;
+            case 14: deleteRecordLogicalWithTree(); break;
+            case 15: restoreRecordWithTree(); break;
+            case 16: deleteRecordsPhysicalWithTree(); break;
+            case 99:  // Скрытый пункт для запуска тестов
+                runAllTests();
+                break;
+            case 0:
+                cout << "\n[EXIT] Завершение работы..." << '\n';
+                deleteTreeString(rootBySurname);
+                deleteTreeInt(rootByAge);
+                return 0;
+            default:
+                cout << "\n[ERROR] Неверный выбор!" << '\n';
+            }
+        }*/
 }
